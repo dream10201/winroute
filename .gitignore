@@ -1,0 +1,7 @@
+# build output
+winroute.exe
+winroute
+*.log
+
+# local config (keep config.example.json in the repo)
+config.json
