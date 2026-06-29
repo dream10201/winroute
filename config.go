@@ -8,11 +8,13 @@ import (
 	"strings"
 )
 
-// Rule pins a destination CIDR to a specific network.
+// Rule pins a destination to a specific network.
 //   target = "company" -> route via the company (10.x) network
 //   target = "router"  -> route via the home / CPE router network
+// Dest may be a CIDR ("172.16.0.0/12"), a bare IP ("8.8.8.8"), or a hostname
+// ("oa.company.com", resolved via the system DNS at runtime).
 type Rule struct {
-	CIDR   string `json:"cidr"`
+	Dest   string `json:"dest"`
 	Target string `json:"target"`
 }
 
@@ -105,13 +107,17 @@ func (c Config) validate() error {
 		}
 	}
 	for _, r := range c.Rules {
-		// A rule target is either an IP/CIDR or a hostname (resolved at runtime).
-		if _, err := normalizeCIDR(r.CIDR); err != nil && !looksLikeHostname(r.CIDR) {
-			return fmt.Errorf("rule %q is neither a valid IP/CIDR nor a hostname", r.CIDR)
+		d := r.Dest
+		if d == "" {
+			return fmt.Errorf("rule has empty dest")
+		}
+		// A rule dest is either an IP/CIDR or a hostname (resolved at runtime).
+		if _, err := normalizeCIDR(d); err != nil && !looksLikeHostname(d) {
+			return fmt.Errorf("rule %q is neither a valid IP/CIDR nor a hostname", d)
 		}
 		t := strings.ToLower(r.Target)
 		if t != "company" && t != "router" {
-			return fmt.Errorf("rule %q has invalid target %q (want company|router)", r.CIDR, r.Target)
+			return fmt.Errorf("rule %q has invalid target %q (want company|router)", d, r.Target)
 		}
 	}
 	return nil

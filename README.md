@@ -39,7 +39,7 @@ GOOS=windows GOARCH=amd64 go build -o winroute.exe .
 - `company_cidrs`：始终走公司网的网段，默认 `["10.0.0.0/8"]`。
 - `company_detect_cidr`：用于识别哪张网卡是公司网，默认 `10.0.0.0/8`。
 - `company_interface_hint` / `router_interface_hint`：按网卡名（友好名，含子串即可）强制指定，优先级高于上面的自动识别。公司网不是 10 开头时用这个。
-- `rules`：额外覆盖，`target` 取 `company` 或 `router`。`cidr` 字段支持三种写法：
+- `rules`：额外覆盖，`target` 取 `company` 或 `router`。`dest` 字段支持三种写法：
   - 网段 `"172.16.0.0/12"`；
   - 裸 IP `"8.8.8.8"`（按 `/32` 处理）；
   - **域名** `"oa.company.com"`：用系统 DNS 解析出所有 A 记录，给每个 IP 装一条 `/32` 路由，解析结果变化时自动增删。

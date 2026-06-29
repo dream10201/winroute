@@ -4,10 +4,10 @@
   "company_interface_hint": "",
   "router_interface_hint": "",
   "rules": [
-    { "cidr": "172.16.0.0/12", "target": "company" },
-    { "cidr": "203.0.113.7/32", "target": "company" },
-    { "cidr": "oa.company.com", "target": "company" },
-    { "cidr": "8.8.8.8", "target": "router" }
+    { "dest": "172.16.0.0/12", "target": "company" },
+    { "dest": "203.0.113.7", "target": "company" },
+    { "dest": "oa.company.com", "target": "company" },
+    { "dest": "8.8.8.8", "target": "router" }
   ],
   "force_default_to_router": true,
   "poll_seconds": 5,

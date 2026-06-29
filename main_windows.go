@@ -218,7 +218,7 @@ func buildDesired(cfg Config, company, router *Iface, dns *dnsCache) map[string]
 		}
 		for _, r := range cfg.Rules {
 			if strings.EqualFold(r.Target, "company") {
-				for _, n := range expand(r.CIDR) {
+				for _, n := range expand(r.Dest) {
 					desired[n] = ct
 				}
 			}
@@ -229,7 +229,7 @@ func buildDesired(cfg Config, company, router *Iface, dns *dnsCache) map[string]
 		rt := target{router.Gateway.String(), router.Index}
 		for _, r := range cfg.Rules {
 			if strings.EqualFold(r.Target, "router") {
-				for _, n := range expand(r.CIDR) {
+				for _, n := range expand(r.Dest) {
 					desired[n] = rt
 				}
 			}
