@@ -67,7 +67,7 @@ func main() {
 	}
 
 	applied := map[string]target{} // cidr -> currently installed next hop
-	dns := newDNSCache(time.Duration(cfg.DNSRefreshSeconds) * time.Second)
+	dns := newDNSCache(time.Duration(cfg.DNSRefreshSeconds)*time.Second, cfg.DNSServers)
 
 	// On shutdown, withdraw everything we installed so we leave the routing
 	// table the way we found it.

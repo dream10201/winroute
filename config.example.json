@@ -11,5 +11,6 @@
   ],
   "force_default_to_router": true,
   "poll_seconds": 5,
-  "dns_refresh_seconds": 60
+  "dns_refresh_seconds": 60,
+  "dns_servers": []
 }

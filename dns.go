@@ -24,10 +24,42 @@ func looksLikeHostname(s string) bool {
 // we re-resolve at most once per refresh interval. On lookup failure it keeps
 // the last good answer so a transient DNS hiccup doesn't drop routes.
 type dnsCache struct {
-	refresh time.Duration
+	refresh  time.Duration
+	resolver *net.Resolver
 
 	mu      sync.Mutex
 	entries map[string]*dnsEntry
+}
+
+// buildResolver returns a resolver that queries the given DNS servers (in
+// order, first that answers wins). With no servers it returns the system
+// resolver. Each server may be "1.1.1.1" or "1.1.1.1:53".
+func buildResolver(servers []string) *net.Resolver {
+	if len(servers) == 0 {
+		return net.DefaultResolver
+	}
+	addrs := make([]string, 0, len(servers))
+	for _, s := range servers {
+		if _, _, err := net.SplitHostPort(s); err != nil {
+			s = net.JoinHostPort(s, "53")
+		}
+		addrs = append(addrs, s)
+	}
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			d := net.Dialer{Timeout: 3 * time.Second}
+			var lastErr error
+			for _, a := range addrs {
+				if c, err := d.DialContext(ctx, network, a); err == nil {
+					return c, nil
+				} else {
+					lastErr = err
+				}
+			}
+			return nil, lastErr
+		},
+	}
 }
 
 type dnsEntry struct {
@@ -36,11 +68,15 @@ type dnsEntry struct {
 	hasGood bool
 }
 
-func newDNSCache(refresh time.Duration) *dnsCache {
+func newDNSCache(refresh time.Duration, servers []string) *dnsCache {
 	if refresh <= 0 {
 		refresh = 60 * time.Second
 	}
-	return &dnsCache{refresh: refresh, entries: make(map[string]*dnsEntry)}
+	return &dnsCache{
+		refresh:  refresh,
+		resolver: buildResolver(servers),
+		entries:  make(map[string]*dnsEntry),
+	}
 }
 
 // lookup returns the IPv4 addresses for host, re-resolving if the cached answer
@@ -61,7 +97,7 @@ func (c *dnsCache) lookup(host string) []net.IP {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	addrs, err := net.DefaultResolver.LookupIP(ctx, "ip4", host)
+	addrs, err := c.resolver.LookupIP(ctx, "ip4", host)
 
 	c.mu.Lock()
 	defer c.mu.Unlock()

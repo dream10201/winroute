@@ -47,6 +47,10 @@ type Config struct {
 
 	// How often to re-resolve hostname rules via system DNS, in seconds.
 	DNSRefreshSeconds int `json:"dns_refresh_seconds"`
+
+	// DNS servers used to resolve hostname rules, e.g. ["10.16.0.10", "1.1.1.1"].
+	// Each may include a port ("1.1.1.1:53"). Empty = use the system resolver.
+	DNSServers []string `json:"dns_servers"`
 }
 
 func defaultConfig() Config {
@@ -104,6 +108,15 @@ func (c Config) validate() error {
 	for _, c := range c.CompanyCIDRs {
 		if _, err := normalizeCIDR(c); err != nil {
 			return err
+		}
+	}
+	for _, s := range c.DNSServers {
+		host := s
+		if h, _, err := net.SplitHostPort(s); err == nil {
+			host = h
+		}
+		if net.ParseIP(host) == nil {
+			return fmt.Errorf("invalid dns_servers entry %q (want an IP, optionally with :port)", s)
 		}
 	}
 	for _, r := range c.Rules {

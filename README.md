@@ -44,6 +44,7 @@ GOOS=windows GOARCH=amd64 go build -o winroute.exe .
   - 裸 IP `"8.8.8.8"`（按 `/32` 处理）；
   - **域名** `"oa.company.com"`：用系统 DNS 解析出所有 A 记录，给每个 IP 装一条 `/32` 路由，解析结果变化时自动增删。
 - `dns_refresh_seconds`：域名重解析间隔秒数，默认 60。解析失败时保留上次结果，不会误删路由。
+- `dns_servers`：解析域名规则用的 DNS 服务器，如 `["10.16.0.10", "1.1.1.1"]`（可带端口 `"1.1.1.1:53"`）。按顺序尝试，先应答的生效。**留空（默认）则用系统 DNS。** 公司域名需用公司内网 DNS 才能解析正确时，在这里填公司 DNS。
 - `force_default_to_router`：两网都在线时是否把默认路由抢到路由器，默认 `true`。
 - `poll_seconds`：轮询间隔秒数，默认 5。
 
