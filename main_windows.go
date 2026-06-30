@@ -83,7 +83,8 @@ func main() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
-	reconcileOnce(cfg, applied, dns)
+	var lastSig string
+	reconcileOnce(cfg, applied, dns, &lastSig)
 	if *once {
 		return
 	}
@@ -93,7 +94,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			reconcileOnce(cfg, applied, dns)
+			reconcileOnce(cfg, applied, dns, &lastSig)
 		case s := <-sig:
 			logf("signal %v received", s)
 			cleanup()
@@ -104,7 +105,7 @@ func main() {
 
 // reconcileOnce computes the desired routing state from the current network
 // and mutates the table so it matches, updating `applied` in place.
-func reconcileOnce(cfg Config, applied map[string]target, dns *dnsCache) {
+func reconcileOnce(cfg Config, applied map[string]target, dns *dnsCache, lastSig *string) {
 	ifaces, err := enumerateIfaces()
 	if err != nil {
 		logf("enumerate interfaces: %v", err)
@@ -139,7 +140,38 @@ func reconcileOnce(cfg Config, applied map[string]target, dns *dnsCache) {
 		delete(applied, cidr)
 	}
 
-	logState(company, router, desired)
+	// Only print the state line when something actually changed, so a steady
+	// network stays quiet instead of logging every poll.
+	if sig := stateSig(company, router, desired); sig != *lastSig {
+		logState(company, router, desired)
+		*lastSig = sig
+	}
+}
+
+// stateSig is a stable fingerprint of the current routing decision: which
+// adapters are in play and the full destination -> next-hop map.
+func stateSig(company, router *Iface, desired map[string]target) string {
+	var b strings.Builder
+	ifSig := func(i *Iface) {
+		if i == nil {
+			b.WriteString("none;")
+			return
+		}
+		fmt.Fprintf(&b, "%d/%s;", i.Index, i.Gateway)
+	}
+	ifSig(company)
+	ifSig(router)
+
+	keys := make([]string, 0, len(desired))
+	for k := range desired {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		t := desired[k]
+		fmt.Fprintf(&b, "%s>%s/%d;", k, t.gateway, t.ifIndex)
+	}
+	return b.String()
 }
 
 // classify picks which adapter is the company net and which is the router.
