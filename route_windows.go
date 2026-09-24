@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strconv"
 	"syscall"
+
+	"golang.org/x/sys/windows"
 )
 
 // route shells out to the Windows ROUTE command. It is run with a hidden
@@ -52,4 +54,34 @@ func deleteRoute(cidr string) error {
 	}
 	_, err = route("delete", dest, "mask", mask)
 	return err
+}
+
+// ifMetric is an adapter's IPv4 interface metric as found before we touched it.
+type ifMetric struct {
+	auto  bool
+	value uint32
+}
+
+func getIfMetric(ifIndex int) (ifMetric, error) {
+	row := windows.MibIpInterfaceRow{Family: windows.AF_INET, InterfaceIndex: uint32(ifIndex)}
+	if err := windows.GetIpInterfaceEntry(&row); err != nil {
+		return ifMetric{}, err
+	}
+	return ifMetric{auto: row.UseAutomaticMetric != 0, value: row.Metric}, nil
+}
+
+// setIfMetric changes the IPv4 interface metric in the active store only, so a
+// reboot or adapter reset reverts it.
+func setIfMetric(ifIndex int, m ifMetric) error {
+	arg := fmt.Sprintf("-InterfaceMetric %d", m.value)
+	if m.auto {
+		arg = "-AutomaticMetric Enabled"
+	}
+	ps := fmt.Sprintf("Set-NetIPInterface -InterfaceIndex %d -AddressFamily IPv4 -PolicyStore ActiveStore %s -ErrorAction Stop", ifIndex, arg)
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", ps)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s: %w: %s", ps, err, out)
+	}
+	return nil
 }

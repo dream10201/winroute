@@ -23,6 +23,11 @@ import (
 // yet less specific than the company CIDRs so 10.x still goes to the company.
 var defaultSplit = []string{"0.0.0.0/1", "128.0.0.0/1"}
 
+// Interface metric given to the company adapter while the default is forced to
+// the router. Windows sends DNS queries to the servers of the lowest-metric
+// adapter first, so the company NIC must rank below the router NIC.
+const companyMetric = 9999
+
 // target is the desired next hop for a destination.
 type target struct {
 	gateway string
@@ -67,6 +72,7 @@ func main() {
 	}
 
 	applied := map[string]target{} // cidr -> currently installed next hop
+	metrics := map[int]ifMetric{}  // ifIndex -> original metric we overrode
 	dns := newDNSCache(time.Duration(cfg.DNSRefreshSeconds)*time.Second, cfg.DNSServers)
 
 	// On shutdown, withdraw everything we installed so we leave the routing
@@ -77,6 +83,11 @@ func main() {
 				logf("cleanup delete %s: %v", cidr, err)
 			}
 		}
+		for idx, orig := range metrics {
+			if err := setIfMetric(idx, orig); err != nil {
+				logf("cleanup restore metric if %d: %v", idx, err)
+			}
+		}
 		logf("winroute stopped, routes withdrawn")
 	}
 
@@ -84,7 +95,7 @@ func main() {
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
 	var lastSig string
-	reconcileOnce(cfg, applied, dns, &lastSig)
+	reconcileOnce(cfg, applied, metrics, dns, &lastSig)
 	if *once {
 		return
 	}
@@ -94,7 +105,7 @@ func main() {
 	for {
 		select {
 		case <-ticker.C:
-			reconcileOnce(cfg, applied, dns, &lastSig)
+			reconcileOnce(cfg, applied, metrics, dns, &lastSig)
 		case s := <-sig:
 			logf("signal %v received", s)
 			cleanup()
@@ -105,7 +116,7 @@ func main() {
 
 // reconcileOnce computes the desired routing state from the current network
 // and mutates the table so it matches, updating `applied` in place.
-func reconcileOnce(cfg Config, applied map[string]target, dns *dnsCache, lastSig *string) {
+func reconcileOnce(cfg Config, applied map[string]target, metrics map[int]ifMetric, dns *dnsCache, lastSig *string) {
 	ifaces, err := enumerateIfaces()
 	if err != nil {
 		logf("enumerate interfaces: %v", err)
@@ -140,12 +151,52 @@ func reconcileOnce(cfg Config, applied map[string]target, dns *dnsCache, lastSig
 		delete(applied, cidr)
 	}
 
+	reconcileMetric(cfg, company, router, metrics)
+
 	// Only print the state line when something actually changed, so a steady
 	// network stays quiet instead of logging every poll.
 	if sig := stateSig(company, router, desired); sig != *lastSig {
 		logState(company, router, desired)
 		*lastSig = sig
 	}
+}
+
+// reconcileMetric keeps the company adapter's interface metric above the
+// router's while the default route is forced to the router, and restores it
+// otherwise.
+func reconcileMetric(cfg Config, company, router *Iface, metrics map[int]ifMetric) {
+	want := -1
+	if cfg.ForceDefaultToRouter && company != nil && router != nil {
+		want = company.Index
+	}
+	for idx, orig := range metrics {
+		if idx == want {
+			continue
+		}
+		if err := setIfMetric(idx, orig); err != nil {
+			logf("restore metric if %d: %v", idx, err)
+		} else {
+			logf("restore metric if %d", idx)
+		}
+		delete(metrics, idx)
+	}
+	if want < 0 || company.Metric > router.Metric {
+		return
+	}
+	orig, ok := metrics[want]
+	if !ok {
+		var err error
+		if orig, err = getIfMetric(want); err != nil {
+			logf("read metric if %d: %v", want, err)
+			return
+		}
+	}
+	if err := setIfMetric(want, ifMetric{value: companyMetric}); err != nil {
+		logf("set metric if %d: %v", want, err)
+		return
+	}
+	logf("metric if %d: %d -> %d", want, company.Metric, companyMetric)
+	metrics[want] = orig
 }
 
 // stateSig is a stable fingerprint of the current routing decision: which

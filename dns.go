@@ -63,9 +63,9 @@ func buildResolver(servers []string) *net.Resolver {
 }
 
 type dnsEntry struct {
-	ips     []net.IP // last good IPv4 answer
+	ips      []net.IP // last good IPv4 answer
 	resolved time.Time
-	hasGood bool
+	hasGood  bool
 }
 
 func newDNSCache(refresh time.Duration, servers []string) *dnsCache {

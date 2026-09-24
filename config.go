@@ -9,8 +9,10 @@ import (
 )
 
 // Rule pins a destination to a specific network.
-//   target = "company" -> route via the company (10.x) network
-//   target = "router"  -> route via the home / CPE router network
+//
+//	target = "company" -> route via the company (10.x) network
+//	target = "router"  -> route via the home / CPE router network
+//
 // Dest may be a CIDR ("172.16.0.0/12"), a bare IP ("8.8.8.8"), or a hostname
 // ("oa.company.com", resolved via the system DNS at runtime).
 type Rule struct {
